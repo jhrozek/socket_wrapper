@@ -2814,6 +2814,122 @@ static void swrap_sendmsg_after(struct socket_info *si,
 	errno = saved_errno;
 }
 
+static int swrap_recvmsg_before(int fd,
+				struct socket_info *si,
+				struct msghdr *msg,
+				struct iovec *tmp_iov)
+#if 0
+				    struct sockaddr_un *tmp_un,
+				    const struct sockaddr_un **to_un,
+				    const struct sockaddr **to,
+				    int *bcast)
+#endif
+
+{
+	size_t i, len = 0;
+	//struct sockaddr_un tmp_un;
+	ssize_t ret;
+#if 0
+	if (to_un) {
+		*to_un = NULL;
+	}
+	if (to) {
+		*to = NULL;
+	}
+	if (bcast) {
+		*bcast = 0;
+	}
+#endif
+	switch (si->type) {
+	case SOCK_STREAM:
+		if (!si->connected) {
+			errno = ENOTCONN;
+			return -1;
+		}
+
+		if (msg->msg_iovlen == 0) {
+			break;
+		}
+
+		for (i=0; i < msg->msg_iovlen; i++) {
+			size_t nlen;
+			nlen = len + msg->msg_iov[i].iov_len;
+			if (nlen > SOCKET_MAX_PACKET) {
+				break;
+			}
+		}
+		msg->msg_iovlen = i;
+		if (msg->msg_iovlen == 0) {
+			*tmp_iov = msg->msg_iov[0];
+			tmp_iov->iov_len = MIN(tmp_iov->iov_len, SOCKET_MAX_PACKET);
+			msg->msg_iov = tmp_iov;
+			msg->msg_iovlen = 1;
+		}
+		break;
+
+	case SOCK_DGRAM:
+#if 0
+		if (si->connected) {
+			if (msg->msg_name) {
+				errno = EISCONN;
+				return -1;
+			}
+		} else {
+			if (msg->msg_name == NULL) {
+				errno = ENOTCONN;
+				return -1;
+			}
+
+			ret = sockaddr_convert_to_un(si, msg->msg_name, msg->msg_namelen,
+						     tmp_un, 0, bcast);
+			if (ret == -1) return -1;
+
+			if (to_un) {
+				*to_un = tmp_un;
+			}
+			if (to) {
+				*to = msg->msg_name;
+			}
+			msg->msg_name = tmp_un;
+			msg->msg_namelen = sizeof(*tmp_un);
+		}
+#endif
+		if (si->bound == 0) {
+			ret = swrap_auto_bind(fd, si, si->family);
+			if (ret == -1) return -1;
+		}
+#if 0
+		if (!si->defer_connect) {
+			break;
+		}
+
+		ret = sockaddr_convert_to_un(si, si->peername, si->peername_len,
+					     tmp_un, 0, NULL);
+		if (ret == -1) return -1;
+
+		ret = real_connect(si->fd, (struct sockaddr *)tmp_un,
+				   sizeof(*tmp_un));
+
+		/* to give better errors */
+		if (ret == -1 && errno == ENOENT) {
+			errno = EHOSTUNREACH;
+		}
+
+		if (ret == -1) {
+			return ret;
+		}
+
+		si->defer_connect = 0;
+#endif
+		break;
+	default:
+		errno = EHOSTUNREACH;
+		return -1;
+	}
+
+	return 0;
+}
+
 /****************************************************************************
  *   RECVFROM
  ***************************************************************************/
