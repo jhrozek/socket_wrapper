@@ -2818,28 +2818,12 @@ static int swrap_recvmsg_before(int fd,
 				struct socket_info *si,
 				struct msghdr *msg,
 				struct iovec *tmp_iov)
-#if 0
-				    struct sockaddr_un *tmp_un,
-				    const struct sockaddr_un **to_un,
-				    const struct sockaddr **to,
-				    int *bcast)
-#endif
-
 {
 	size_t i, len = 0;
-	//struct sockaddr_un tmp_un;
 	ssize_t ret;
-#if 0
-	if (to_un) {
-		*to_un = NULL;
-	}
-	if (to) {
-		*to = NULL;
-	}
-	if (bcast) {
-		*bcast = 0;
-	}
-#endif
+
+	(void)fd; /* unused */
+
 	switch (si->type) {
 	case SOCK_STREAM:
 		if (!si->connected) {
@@ -2868,59 +2852,12 @@ static int swrap_recvmsg_before(int fd,
 		break;
 
 	case SOCK_DGRAM:
-#if 0
-		if (si->connected) {
-			if (msg->msg_name) {
-				errno = EISCONN;
-				return -1;
-			}
-		} else {
-			if (msg->msg_name == NULL) {
-				errno = ENOTCONN;
-				return -1;
-			}
-
-			ret = sockaddr_convert_to_un(si, msg->msg_name, msg->msg_namelen,
-						     tmp_un, 0, bcast);
-			if (ret == -1) return -1;
-
-			if (to_un) {
-				*to_un = tmp_un;
-			}
-			if (to) {
-				*to = msg->msg_name;
-			}
-			msg->msg_name = tmp_un;
-			msg->msg_namelen = sizeof(*tmp_un);
-		}
-#endif
 		if (si->bound == 0) {
 			ret = swrap_auto_bind(fd, si, si->family);
-			if (ret == -1) return -1;
+			if (ret == -1) {
+				return -1;
+			}
 		}
-#if 0
-		if (!si->defer_connect) {
-			break;
-		}
-
-		ret = sockaddr_convert_to_un(si, si->peername, si->peername_len,
-					     tmp_un, 0, NULL);
-		if (ret == -1) return -1;
-
-		ret = real_connect(si->fd, (struct sockaddr *)tmp_un,
-				   sizeof(*tmp_un));
-
-		/* to give better errors */
-		if (ret == -1 && errno == ENOENT) {
-			errno = EHOSTUNREACH;
-		}
-
-		if (ret == -1) {
-			return ret;
-		}
-
-		si->defer_connect = 0;
-#endif
 		break;
 	default:
 		errno = EHOSTUNREACH;
@@ -2993,11 +2930,26 @@ static int swrap_recvmsg_after(struct socket_info *si,
 			break;
 		}
 
-		swrap_dump_packet(si, from, SWRAP_RECVFROM, buf, ret);
+		if (un_addr != NULL) {
+			int rc;
 
-		if (sockaddr_convert_from_un(si, un_addr, un_addrlen,
-					     si->family, from, fromlen) == -1) {
-			return -1;
+			rc = sockaddr_convert_from_un(si,
+					               un_addr,
+						       un_addrlen,
+						       si->family,
+						       from,
+						       fromlen);
+			if (rc == -1) {
+				return -1;
+			}
+
+			swrap_dump_packet(si, from, SWRAP_RECVFROM, buf, ret);
+		} else {
+			swrap_dump_packet(si,
+					  si->peername,
+					  SWRAP_RECV,
+					  buf,
+					  ret);
 		}
 
 		break;
@@ -3015,8 +2967,8 @@ static int swrap_recvmsg_after(struct socket_info *si,
 static ssize_t swrap_recvfrom(int s, void *buf, size_t len, int flags,
 			      struct sockaddr *from, socklen_t *fromlen)
 {
-	struct sockaddr_un un_addr;
-	socklen_t un_addrlen = sizeof(un_addr);
+	struct sockaddr_un from_addr;
+	socklen_t from_addrlen = sizeof(from_addr);
 	ssize_t ret;
 	struct socket_info *si = find_socket_info(s);
 	struct sockaddr_storage ss;
@@ -3034,7 +2986,7 @@ static ssize_t swrap_recvfrom(int s, void *buf, size_t len, int flags,
 				     fromlen);
 	}
 
-	if (!from) {
+	if (from == NULL) {
 		from = (struct sockaddr *)(void *)&ss;
 		fromlen = &ss_len;
 	}
@@ -3051,27 +3003,29 @@ static ssize_t swrap_recvfrom(int s, void *buf, size_t len, int flags,
 	msg.msg_flags = 0;             /* flags on received message */
 
 	tret = swrap_recvmsg_before(s, si, &msg, &tmp);
-	if (tret == -1) return -1;
+	if (tret == -1) {
+		return -1;
+	}
 
 	buf = msg.msg_iov[0].iov_base;
 	len = msg.msg_iov[0].iov_len;
 
 	/* irix 6.4 forgets to null terminate the sun_path string :-( */
-	memset(&un_addr, 0, sizeof(un_addr));
+	memset(&from_addr, 0, sizeof(from_addr));
 	ret = libc_recvfrom(s,
 			    buf,
 			    len,
 			    flags,
-			    (struct sockaddr *)(void *)&un_addr,
-			    &un_addrlen);
+			    (struct sockaddr *)(void *)&from_addr,
+			    &from_addrlen);
 	if (ret == -1) {
 		return ret;
 	}
 
 	tret = swrap_recvmsg_after(si,
 			           &msg,
-				   &un_addr,
-				   un_addrlen,
+				   &from_addr,
+				   from_addrlen,
 				   from,
 				   fromlen,
 				   ret);
@@ -3205,8 +3159,8 @@ static ssize_t swrap_recv(int s, void *buf, size_t len, int flags)
 	msg.msg_controllen = 0;        /* ancillary data buffer len */
 	msg.msg_flags = 0;             /* flags on received message */
 
-	ret = swrap_recvmsg_before(s, si, &msg, &tmp);
-	if (ret == -1) {
+	tret = swrap_recvmsg_before(s, si, &msg, &tmp);
+	if (tret == -1) {
 		SWRAP_LOG(SWRAP_LOG_ERROR, "swrap_recvmsg_before failed");
 		return -1;
 	}
