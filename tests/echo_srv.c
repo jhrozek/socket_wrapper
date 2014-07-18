@@ -73,7 +73,7 @@ union pktinfo {
 #define HAVE_UNION_PKTINFO 1
 #endif /* IP_PKTINFO || IP_RECVDSTADDR || IPV6_PKTINFO */
 
-static const char *echo_server_address(int family)
+static const char *echo_server_address(int family, char *addr)
 {
 	switch (family) {
 	case AF_INET: {
@@ -83,7 +83,7 @@ static const char *echo_server_address(int family)
 			return ip4;
 		}
 
-		return ECHO_SRV_IPV4;
+		return addr ? addr : ECHO_SRV_IPV4;
 	}
 	case AF_INET6: {
 		const char *ip6 = getenv("TORTURE_SERVER_ADDRESS_IPV6");
@@ -92,7 +92,7 @@ static const char *echo_server_address(int family)
 			return ip6;
 		}
 
-		return ECHO_SRV_IPV6;
+		return addr ? addr : ECHO_SRV_IPV6;
 	}
 	default:
 		return NULL;
@@ -550,7 +550,7 @@ done:
     }
 }
 
-static ssize_t echo_udp_recv_from_to(int sock,
+static ssize_t echo_udp_recv_from_to(int sock, char *echo_address,
 				     void *buf, size_t buflen, int flags,
 				     struct sockaddr *from, socklen_t *fromlen,
 				     struct sockaddr *to, socklen_t *tolen)
@@ -618,7 +618,7 @@ static ssize_t echo_udp_recv_from_to(int sock,
 					abort();
 				}
 
-				if (strcmp(ip, echo_server_address(AF_INET)) != 0) {
+				if (strcmp(ip, echo_server_address(AF_INET, echo_address)) != 0) {
 					fprintf(stderr, "Wrong IP received");
 					abort();
 				}
@@ -643,7 +643,7 @@ static ssize_t echo_udp_recv_from_to(int sock,
 					abort();
 				}
 
-				if (strcmp(ip, echo_server_address(AF_INET)) != 0) {
+				if (strcmp(ip, echo_server_address(AF_INET, echo_address)) != 0) {
 					fprintf(stderr, "Wrong IP received");
 					abort();
 				}
@@ -667,7 +667,7 @@ static ssize_t echo_udp_recv_from_to(int sock,
 					abort();
 				}
 
-				if (strcmp(ip, echo_server_address(AF_INET6)) != 0) {
+				if (strcmp(ip, echo_server_address(AF_INET6, echo_address)) != 0) {
 					fprintf(stderr, "Wrong IP received");
 					abort();
 				}
@@ -781,7 +781,7 @@ static ssize_t echo_udp_send_to_from(int sock,
 	return ret;
 }
 
-static void echo_udp(int sock)
+static void echo_udp(int sock, struct echo_srv_opts *opts)
 {
     struct sockaddr_storage saddr;
     struct sockaddr_storage daddr;
@@ -791,7 +791,7 @@ static void echo_udp(int sock)
     char buf[BUFSIZE];
 
     while (1) {
-        bret = echo_udp_recv_from_to(sock,
+        bret = echo_udp_recv_from_to(sock, opts->bind,
                                      buf, BUFSIZE, 0,
                                      (struct sockaddr *)&saddr, &saddrlen,
                                      (struct sockaddr *)&daddr, &daddrlen);
@@ -818,7 +818,7 @@ static void echo(int sock, struct echo_srv_opts *opts)
             echo_tcp(sock);
             return;
         case SOCK_DGRAM:
-            echo_udp(sock);
+            echo_udp(sock, opts);
             return;
         default:
             fprintf(stderr, "Unsupported protocol\n");
