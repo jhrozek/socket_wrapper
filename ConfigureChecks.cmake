@@ -197,6 +197,7 @@ endif (HAVE_LIBDL)
 
 if (OSX)
     set(HAVE_APPLE 1)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D__APPLE_USE_RFC_3542")
 endif (OSX)
 
 # ENDIAN
