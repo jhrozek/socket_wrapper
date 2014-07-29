@@ -552,8 +552,8 @@ done:
 
 static ssize_t echo_udp_recv_from_to(int sock, char *echo_address,
 				     void *buf, size_t buflen, int flags,
-				     struct sockaddr *from, socklen_t *fromlen,
-				     struct sockaddr *to, socklen_t *tolen)
+				     struct sockaddr_storage *from, socklen_t *fromlen,
+				     struct sockaddr_storage *to, socklen_t *tolen)
 {
 	struct msghdr rmsg;
 	struct iovec riov;
@@ -793,8 +793,8 @@ static void echo_udp(int sock, struct echo_srv_opts *opts)
     while (1) {
         bret = echo_udp_recv_from_to(sock, opts->bind,
                                      buf, BUFSIZE, 0,
-                                     (struct sockaddr *)&saddr, &saddrlen,
-                                     (struct sockaddr *)&daddr, &daddrlen);
+                                     &saddr, &saddrlen,
+                                     &daddr, &daddrlen);
         if (bret == -1) {
             perror("recvfrom");
             continue;
