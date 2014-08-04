@@ -533,6 +533,36 @@ done:
     }
 }
 
+static bool is_inaddr_any(int af, char *echo_address)
+{
+	int rc;
+
+	switch (af) {
+	case AF_INET: {
+	    struct sockaddr_in sin;
+	    rc = inet_pton(AF_INET,
+			   echo_server_address(AF_INET, echo_address),
+			   &sin.sin_addr);
+	    if (rc == 1) {
+		return sin.sin_addr.s_addr == htonl(INADDR_ANY);
+	    }
+	}
+	case AF_INET6: {
+	    struct sockaddr_in6 sin6;
+	    rc = inet_pton(AF_INET6,
+			   echo_server_address(AF_INET6, echo_address),
+			   &sin6.sin6_addr);
+	    if (rc == 1) {
+		return memcmp(&sin6.sin6_addr, &in6addr_any, sizeof(in6addr_any)) == 0;
+	    }
+	}
+	default:
+		return false;
+	}
+
+	return false;
+}
+
 static ssize_t echo_udp_recv_from_to(int sock, char *echo_address,
 				     void *buf, size_t buflen, int flags,
 				     struct sockaddr *from, socklen_t *fromlen,
@@ -602,7 +632,8 @@ static ssize_t echo_udp_recv_from_to(int sock, char *echo_address,
 					abort();
 				}
 
-				if (strcmp(ip, echo_server_address(AF_INET, echo_address)) != 0) {
+				if (is_inaddr_any(AF_INET, echo_address) == false &&
+				    strcmp(ip, echo_server_address(AF_INET, echo_address)) != 0) {
 					fprintf(stderr, "Wrong IP received");
 					abort();
 				}
@@ -629,7 +660,8 @@ static ssize_t echo_udp_recv_from_to(int sock, char *echo_address,
 					abort();
 				}
 
-				if (strcmp(ip, echo_server_address(AF_INET, echo_address)) != 0) {
+				if (is_inaddr_any(AF_INET, echo_address) == false &&
+				    strcmp(ip, echo_server_address(AF_INET, echo_address)) != 0) {
 					fprintf(stderr, "Wrong IP received");
 					abort();
 				}
@@ -655,7 +687,8 @@ static ssize_t echo_udp_recv_from_to(int sock, char *echo_address,
 					abort();
 				}
 
-				if (strcmp(ip, echo_server_address(AF_INET6, echo_address)) != 0) {
+				if (is_inaddr_any(AF_INET6, echo_address) == false &&
+				    strcmp(ip, echo_server_address(AF_INET6, echo_address)) != 0) {
 					fprintf(stderr, "Wrong IP received");
 					abort();
 				}
