@@ -284,7 +284,7 @@ void torture_teardown_echo_srv(void **state)
 	/* Make sure the daemon goes away! */
 	kill(pid, SIGTERM);
 
-	kill(pid, 0);
+	rc = kill(pid, 0);
 	if (rc == 0) {
 		fprintf(stderr,
 			"WARNING the echo server is still running!\n");
